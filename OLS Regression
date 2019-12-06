@@ -1,0 +1,49 @@
+######Linear Regression## 
+
+#Let's say your dataset with both PM2.5 and Income are stored in a dataset called pm.income.poly.
+pm.income.poly <- step.5a
+
+#Get ride of NA values
+pm.income.poly <- pm.income.poly[!is.na(pm.income.poly$var1.pred),]
+
+#change the name of the PM2.5 column to a name more intuitive
+names(pm.income.poly)[names(pm.income.poly)=="var1.pred"] <- "PM25_int"
+
+#Plot income and PM2.5 from the pm.income.poly dataset you created
+plot(pm.income.poly$PM25_int~pm.income.poly$Income)
+
+#Notice that there are a lot of 0's in this dataset. If you decide to remove them, use the following line:
+pm.income.poly <-  pm.income.poly[pm.income.poly$PM25_int != 0, ]
+
+#Now plot the data again
+plot(pm.income.poly$PM25_int~pm.income.poly$Income)
+
+#Perform a linear regression on the two variables. You should decide which one is dependent.
+lm.model <- lm(pm.income.poly$PM25_int~pm.income.poly$Income)
+
+#Add the regression model to the plot you created
+abline(lm.model)
+
+#Get the summary of the results
+summary(lm.model)
+
+#You want to determine if the model residuals are spatially clustered. 
+
+#First obtain the residuals from the model
+model.resids <- as.data.frame(residuals.lm(lm.model))
+
+#Then add the residuals to your spatialpolygon dataframe
+pm.income.poly$residuals <- residuals.lm(lm.model)
+
+#Observe the result to make sure it looks correct
+head(pm.income.poly)
+
+#Now, create choropleth map of residuals
+
+van.ext <- as.matrix(extent(spSample))
+resids <- pm.income.poly$residuals
+shades <- auto.shading(resids, n=6, cols = (rev(brewer.pal(6, 'RdYlBu'))))
+choropleth(income.tracts, resids, shades) #map the data with associated colours
+choro.legend("bottomleft", "bottomleft", shades) #add a legend (you might need to change the location)
+title("Residual Errors from the Linear Regression Analysis \n of PM 2.5 as a Function of Income in Metro Vancouver (BC)")
+box(which = "outer")
