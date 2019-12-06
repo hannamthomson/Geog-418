@@ -1,0 +1,196 @@
+#################################################
+##Spatial Interpolation with (universal) Kriging
+# Add X and Y to P
+spSample$X <- coordinates(spSample)[,1]
+spSample$Y <- coordinates(spSample)[,2]
+
+f.1 <- as.formula(PM25AGG ~ X + Y) 
+f.2 <- as.formula(PM25AGG ~ X + Y + I(X*X)+I(Y*Y) + I(X*Y))
+
+#can change the f.1/2 in the codebelow to see show each polynomial changes the curve
+var.smpl <- variogram(f.2, spSample, cloud = FALSE) #, cutoff=1000000, width=89900)
+dat.fit  <- fit.variogram(var.smpl, fit.ranges = FALSE, fit.sills = FALSE,
+                          vgm(psill=0.8, model="Sph", range=6, nugget=0))
+plot(var.smpl, dat.fit)
+
+# Define the trend model
+f.2 <- as.formula(PM25AGG ~ X + Y) 
+
+# Perform the krige interpolation (note the use of the variogram model created in the earlier step)
+dat.krg <- krige(f.2, spSample, grd, dat.fit)
+
+# Convert kriged surface to a raster object for clipping
+krigraster <- raster(dat.krg)
+#r.m <- mask(r, SC.AirBasin.t)
+
+# Plot the map
+tm_shape(krigraster) + 
+  tm_raster(n=10, palette="YlOrRd",  
+            title="Predicted PM2.5 \n(in ppm)") +
+  tm_shape(spSample) + tm_dots(size=0.2) +
+  tm_legend(legend.outside=TRUE)
+  
+#add and plot the variance
+#tm_polygons(income.tracts)
+krigvar   <- raster(dat.krg, layer="var1.var")
+#r.m <- mask(r, SC.AirBasin.t)
+
+tm_shape(krigvar) + 
+  tm_raster(n=7, palette ="Reds",
+            title="Variance map \n(in squared ppm)") +tm_shape(spSample) + tm_dots(size=0.2) +
+  tm_legend(legend.outside=TRUE)
+
+#add and plot the confidence intervals
+krigcon   <- sqrt(raster(dat.krg, layer="var1.var")) * 1.96
+#Krig_mask <- mask(krigcon, income.tracts)
+
+tm_shape(krigcon) + 
+  tm_raster(n=7, palette ="Reds",
+            title="95% CI map \n(in ppm)") +tm_shape(spSample) + tm_dots(size=0.2) +
+  tm_legend(legend.outside=TRUE)
+
+##################################################################################################
+#these were conducted as part of my evaluation for which interpolation method to use, but were not included in the final product
+
+# ##Spatial Interpolation with IDW
+# 
+# #grd <- as.data.frame(spsample(spSample, "regular", n=5000))
+# #names(grd)       <- c("X", "Y")
+# #coordinates(grd) <- c("X", "Y")
+# #gridded(grd)     <- TRUE  # Create SpatialPixel object
+# #fullgrid(grd)    <- TRUE  # Create SpatialGrid object
+# #proj4string(grd) <- proj4string(spSample)
+
+# #project into same projection as everyhing else, borrowing from projection for monitoring stations
+# proj4string(grd) <- proj4string(spSample)
+
+# #doing IDW. the power function is the "idp="
+# P.idw <- gstat::idw(PM25AGG ~ 1, spSample, newdata=grd, idp=4.0)
+# r       <- raster(P.idw)
+# #r.m     <- mask(r, income.pm25)
+
+# ##############
+# #YOU WANT TO MAP THIS BUT TMAP WASNT WORKING-- TRY AGAIN!!!!!!!!!!!!
+# # tmap::tm_shape(spSample) + tm_polygons(income.tracts) +
+# #   tm_dots(col= "PM25AGG", pallette = "YlOrRd", title= "Sampled PM 2.5 \n(in ppm)",
+# #           size= 0.7) + tm_legend(legend.outside= TRUE)
+
+# ####################
+# tm_shape(r) + 
+#   tm_raster(n=10,palette = "YlOrRd",
+#             title="Predicted PM25 \n(in ppm)") + 
+#   tm_shape(spSample) + tm_dots(size=0.2) +
+#   tm_legend(legend.outside=TRUE)
+
+# #################################################
+# Leave-one-out validation routine
+# this creates a foreloop, removes one point fits and IDW surface and puts point back it-- then compares point bac in and compare observed to predicted value
+# IDW.out <- vector(length = length(spSample))
+# for (i in 1:length(spSample)) {
+#   IDW.out[i] <- gstat::idw(PM25AGG ~ 1, spSample[-i,], spSample[i,], idp=4.0)$var1.pred
+# }
+
+#play around with the power function in the foreloop to figure out how well the power function assigns predicted values, 
+#we want it to match the line see RMSE to get the number we want
+
+#Plot the differences
+# OP <- par(pty="s", mar=c(4,3,0,0))
+# plot(IDW.out ~ spSample$PM25AGG, asp=1, xlab="Observed", ylab="Predicted", pch=16,
+#      col=rgb(0,0,0,0.5))
+# abline(lm(IDW.out ~ spSample$PM25AGG), col="red", lw=2,lty=2)
+# abline(0,1)
+# par(OP)
+# sqrt( sum((IDW.out - spSample$PM25AGG)^2) / length(spSample))
+
+# #################################################
+# Implementation of a jackknife technique to estimate a confidence interval at each unsampled point.
+# Create the interpolated surface
+# img <- gstat::idw(PM25AGG~1, spSample, newdata=grd, idp=4.0)
+# n   <- length(spSample)
+# Zi  <- matrix(nrow = length(img$var1.pred), ncol = n)
+
+# Remove a point then interpolate (do this n times for each point)
+# st <- stack()
+# for (i in 1:n){
+#   Z1 <- gstat::idw(PM25AGG~1, spSample[-i,], newdata=grd, idp=4.0)
+#   st <- addLayer(st,raster(Z1,layer=1))
+#   # Calculated pseudo-value Z at j
+#   Zi[,i] <- n * img$var1.pred - (n-1) * Z1$var1.pred
+# }
+
+# Jackknife estimator of parameter Z at location j
+# Zj <- as.matrix(apply(Zi, 1, sum, na.rm=T) / n )
+
+# Compute (Zi* - Zj)^2
+# c1 <- apply(Zi,2,'-',Zj)            # Compute the difference
+# c1 <- apply(c1^2, 1, sum, na.rm=T ) # Sum the square of the difference
+
+# Compute the confidence interval
+# CI <- sqrt( 1/(n*(n-1)) * c1)
+
+# Create (CI / interpolated value) raster
+# img.sig   <- img
+# img.sig$v <- CI /img$var1.pred 
+
+# Clip the confidence raster to Southern California
+# r <- raster(img.sig, layer="v")
+# r.m <- mask(r, income.pm25)
+
+# Plot the map
+# tm_shape(r) + tm_raster(n=7,title="95% confidence interval \n(in ppm)") +
+#   tm_shape(spSample) + tm_dots(size=0.2) +
+#   tm_legend(legend.outside=TRUE)
+
+# #################################################
+# ##Spatial Interpolation with Polynomial Trends
+# Define the 1st order polynomial equation, this is a linear equation, this is done with geographic coordinates
+
+# f.1 <- as.formula(PM25AGG ~ X + Y) 
+
+# Add X and Y to P
+# spSample$X <- coordinates(spSample)[,1]
+# spSample$Y <- coordinates(spSample)[,2]
+ 
+# Run the regression model (it essentially asks can we use xy of this data to predict ozone value)
+# lm.1 <- lm( f.1, data=spSample)
+# 
+# Use the regression model output to interpolate the surface, for every grid cell in the empty grd
+# dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+ 
+# Clip the interpolated raster to Southern California
+# r   <- raster(dat.1st)
+# #r.m <- mask(r, income.pm25)
+ 
+# Plot the map
+# tm_shape(r) + 
+#   tm_raster(n=10, palette="YlOrRd", 
+#             title="Predicted PM25 \n(in ppm)") +
+#   tm_shape(spSample) + tm_dots(size=0.2) +
+#   tm_legend(legend.outside=TRUE)
+
+
+# ###################################################
+# Define the 2nd order polynomial equation, 2nd order is a parabola. 
+#the I function is telling r to not find a variabel called x but take the literal equation(?)
+# f.2 <- as.formula(PM25AGG ~ X + Y + I(X*X)+I(Y*Y) + I(X*Y))
+ 
+# Add X and Y to P
+# spSample$X <- coordinates(spSample)[,1]
+# spSample$Y <- coordinates(spSample)[,2]
+
+# # Run the regression model
+# lm.2 <- lm( f.2, data=spSample)
+# 
+# Use the regression model output to interpolate the surface
+# dat.2nd <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.2, newdata=grd))) 
+
+# Clip the interpolated raster to Southern Cali
+# r   <- raster(dat.2nd)
+# r.m <- mask(r, income.pm25)
+
+# Plot the map
+# tm_shape(r) + 
+#   tm_raster(n=10, palette="YlOrRd", 
+#             title="Predicted PM25 \n(in ppm)") +
+#   tm_shape(spSample) + tm_dots(size=0.2) +
+#   tm_legend(legend.outside=TRUE)
