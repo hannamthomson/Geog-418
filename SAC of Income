@@ -1,0 +1,74 @@
+#Global Moran's I
+
+Van.data <- income.tracts
+van.nb <- poly2nb(Van.data)## calculate neighbour weights matrix, if 2 polygons considered a neighbour it gets a 1
+van.net <- nb2lines(van.nb,coords=coordinates(income.tracts), proj4string=CRS(as.character(NA)))## converts the neighbourmattrix into lines that can be plotted
+
+tm_shape(income.tracts) + tm_borders(col='lightgrey') + 
+  tm_shape(van.net) + tm_lines(col='red')## for this plot we didn't specify so it ran the classification as queens case
+
+van.nb2 <- poly2nb(income.tracts, queen = FALSE)## in this plot we specify that we don't want queens case so it runs as rooks
+van.net2 <- nb2lines(van.nb2,coords=coordinates(income.tracts))
+
+tm_shape(income.tracts) + tm_borders(col='lightgrey') + 
+  tm_shape(van.net) + tm_lines(col='red', lwd = 1.5) + ## here the rooks case (blue) is plotted with the queens case (red)
+  tm_shape(van.net2) + tm_lines(col='blue', lwd = 1.5)
+  
+########################
+#this is the weight matrix, these two lines of code give a description of what happens with the weight matrix
+van.lw <- nb2listw(van.nb, zero.policy = TRUE, style = "W")
+print.listw(van.lw, zero.policy = TRUE)
+
+########################
+#calculate the lag means how an individ polygon compares to the mean of its neighbours
+income.tracts$IncLagMeans = lag.listw(van.lw, income.tracts$Income, zero.policy = TRUE)
+income.tracts$REALlagged<- abs(income.tracts$IncLagMeans- income.tracts$Income)
+map_LagMean <- tm_shape(income.tracts) + 
+  tm_polygons(col = "REALlagged", 
+              title = "Income\nLagged Means", 
+              style = "jenks", 
+              palette = "viridis", n = 6) #+ tm_layout(legend.position = "left", "bottomleft")##legend didnt move
+map_LagMean
+########################
+#calculate the moran's I test
+mi <- moran.test(Van.data$Income, van.lw, zero.policy = TRUE)#runs morans I for us, tells it to run with med income. 
+mi
+
+#this shows us the full range of morans I values, this is kinda like a bellcurve of the potential values
+moran.range <- function(lw) {
+  wmat <- listw2mat(lw)
+  return(range(eigen((wmat + t(wmat))/2)$values))
+}
+moran.range(van.lw)
+
+#this is how the outputs from the morans I stat test are incorporated into the code 
+mI <- mi$estimate[[1]]
+eI <- mi$estimate[[2]]
+var <- mi$estimate[[3]]
+
+#use to determine if global morans I is significant or not. in global morans I, we only get 1 value for all polygons
+Income.Moran.z <- ((mI- eI)/(sqrt(var)))
+
+
+########################  
+# this is the local moran's I
+#i value, expected, variance, and p value for each polygon, rather than 1 value for whole data set
+lisa.test <- localmoran(Van.data$Income, van.lw)##this has med income, MUST CHANGE
+
+#values are attached to the crd data
+Van.data$Ii <- lisa.test[,1] ## these are calling in columns b/c the nubmer is asfte hte comma. 
+Van.data$E.Ii<- lisa.test[,2]
+Van.data$Var.Ii<- lisa.test[,3]
+Van.data$Z.Ii<- lisa.test[,4]
+Van.data$P<- lisa.test[,5]
+########################
+## use the following code to map all the LISA values that you need to map
+map_LISA <- tm_shape(Van.data) + 
+  tm_polygons(col = "Z.Ii", ##looking at value for each polygon, we are mapping morans I this time but you could make it p value or variance etc
+              title = "Local Moran's I Z-Scores", 
+              style = "jenks", 
+              palette = "viridis", n = 6, border.col = NA, border.alpha = 0) +   tm_legend(legend.outside=TRUE)  
+map_LISA
+########################
+moran.plot(Van.data$Income, van.lw, zero.policy=NULL, spChk=NULL, labels=NULL, xlab="Income", 
+           ylab="Spatially Lagged Income", quiet=NULL)
