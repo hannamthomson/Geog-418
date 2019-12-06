@@ -1,0 +1,77 @@
+#Geographically Weighted Regression
+
+#Let's say you are continuing with your data from the regression analysis. 
+#The first thing you need to do is to add the polygon coordinates to the spatialpolygondataframe.
+#You can obtain the coordinates using the "coordinates" function from the sp library
+pm.income.poly.coords <- sp::coordinates(pm.income.poly)
+
+#Observe the result
+head(pm.income.poly.coords)
+
+#Now add the coordinates back to the spatialpolygondataframe
+pm.income.poly$X <- pm.income.poly.coords[,1]
+pm.income.poly$Y <- pm.income.poly.coords[,2]
+head(pm.income.poly)
+
+#Determine the bandwidth for GWR: this will take a while
+GWRbandwidth <- gwr.sel(pm.income.poly$Income~pm.income.poly$PM25_int, 
+                        
+                        data=pm.income.poly@data, coords=cbind(pm.income.poly$X,pm.income.poly$Y),adapt=T) 
+
+#Perform GWR on the two variables with the bandwidth determined above
+#This will take a looooooong while
+gwr.model = gwr(pm.income.poly$Income~pm.income.poly$PM25_int, 
+                
+                data=pm.income.poly@data, coords=cbind(pm.income.poly$X,pm.income.poly$Y), 
+                
+                adapt=GWRbandwidth, hatmatrix=TRUE, se.fit=TRUE) 
+
+#Print the results of the model
+gwr.model
+
+#Look at the results in detail
+results<-as.data.frame(gwr.model$SDF)
+head(results)
+
+#Now for the magic. Let's add our local r-square values to the map
+pm.income.poly$localr <- results$localR2
+
+#Create  map of r-square values
+map_GWR_localR <- tm_shape(pm.income.poly) +
+  tm_polygons(col = "localr", ##looking at value for each polygon, we are mapping morans I this time but you could make it p value or variance etc
+              title = "GWR Local R^2",
+              style = "jenks",
+              palette = "YlOrRd", n = 6, border.col = NA, border.alpha = 0) +   tm_legend(legend.outside=TRUE) +tm_layout(asp= 1)
+map_GWR_localR
+
+#choropleth
+# local.r.square <- pm.income.poly$localr
+# shades <- auto.shading(local.r.square, n=6, cols = brewer.pal(6, 'RdYlBu'))
+#choropleth(income.tracts, local.r.square, shades) #map the data with associated colours
+# choro.legend("bottomleft", "left", shades) #add a legend (you might need to change the location)
+# title("Local R-squared Values from the GWR Analysis \n of PM 2.5 as a Function of Income in Metro Vancouver (BC)")
+# box(which = "outer")
+
+
+#Time for more magic. Let's map the coefficients
+pm.income.poly$coeff <- results$pm.income.poly.PM25_int
+
+#Create  map of the coefficients
+# map_GWR_coefficients <- tm_shape(pm.income.poly) +
+#   tm_polygons(col = "coeff", ##looking at value for each polygon, we are mapping morans I this time but you could make it p value or variance etc
+#               title = "GWR Coefficients",
+#               style = "jenks", palette="Spectral", midpoint= 0, n = 6, contrast = c(0.4, 1), 
+#               border.col = NA, border.alpha = 0) +
+#      tm_legend(legend.outside=TRUE)
+# 
+# 
+# map_GWR_coefficients
+
+
+##choropleth
+local.coefficient <- pm.income.poly$coeff
+shades <- auto.shading(local.coefficient, n=6, cols = brewer.pal('RdBu', direction = -1, n=6))
+choropleth(income.tracts, local.coefficient, shades) #map the data with associated colours
+choro.legend("bottomleft","bottomleft", shades) #add a legend (you might need to change the location)
+title("Coefficient Values from the GWR Analysis \n of PM 2.5 as a Function of Income in Metro Vancouver (BC)")
+box(which = "outer")
