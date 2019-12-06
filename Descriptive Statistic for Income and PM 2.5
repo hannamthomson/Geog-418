@@ -1,0 +1,70 @@
+#Mean
+mean_PM25AGG <- mean(pm25.points.aggregate@data$PM25AGG) #This is going to produce a wrong value (NA) due to a single NA value in data
+mean_PM25AGG <- mean(pm25.points.aggregate@data$PM25AGG, na.rm = TRUE) #Use na.rm = TRUE to ignore NA values in calculation
+
+mean_income <- mean(pm25.points.aggregate@data$Income) 
+mean_income <- mean(pm25.points.aggregate@data$Income, na.rm = TRUE)
+
+#Standard Deviation
+sd_PM25AGG <- sd(pm25.points.aggregate@data$PM25AGG, na.rm = TRUE) #Calculate the SD, ignoring NA values
+sd_income <- sd(pm25.points.aggregate@data$Income, na.rm = TRUE)
+#sdSummer <- sd(subset(df_2019, IGN_Day >= 182 & IGN_Day <= 243)$FIRESIZE) #Calculate the SD, ignoring NA values only for the summer months
+
+#Mode
+mode_PM25AGG <- as.numeric(names(sort(table(pm25.points.aggregate@data$PM25AGG), decreasing = TRUE))[1]) #make frequency table of fire size variable and sort it in desending order and extract the first row (Most Frequent)
+mode_income <- as.numeric(names(sort(table(pm25.points.aggregate@data$Income), decreasing = TRUE))[1])
+
+#Median
+med_PM25AGG <- median(pm25.points.aggregate@data$PM25AGG, na.rm = TRUE)
+med_income <- median(pm25.points.aggregate@data$Income, na.rm = TRUE)
+
+#Skewness
+skew_PM25AGG <- skewness(pm25.points.aggregate@data$PM25AGG, na.rm = TRUE)[1]
+skew_income <- skewness(pm25.points.aggregate@data$Income, na.rm = TRUE)[1]
+
+#Kurtosis
+kurt_PM25AGG <- kurtosis(pm25.points.aggregate@data$PM25AGG, na.rm = TRUE)[1]
+kurt_income <- kurtosis(pm25.points.aggregate@data$Income, na.rm = TRUE)[1]
+
+#CoV
+CoV_PM25AGG <- (sd_PM25AGG / mean_PM25AGG) * 100
+CoV_income <- (sd_income / mean_income) * 100
+
+#Normal distribution test
+#norm_PM25AGG_PVAL <- shapiro.test(pm25.points.aggregate@data$PM25AGG)$p.value
+#norm_income_PVAL <- shapiro.test(pm25.points.aggregate@data$Income)$p.value
+
+#####
+#Create a table of descriptive stats
+
+Samples = c("PM25 (ppm)", "Income ($)") #Create an object for the labels
+Mean = c(mean_PM25AGG, mean_income) #Create an object for the means
+SD = c(sd_PM25AGG, sd_income) #Create an object for the standard deviations
+Median = c(med_PM25AGG, med_income) #Create an object for the medians
+Mode <- c(mode_PM25AGG, mode_income) #Create an object for the modes
+Skewness <- c(skew_PM25AGG, skew_income) #Create an object for the skewness
+Kurtosis <- c(kurt_PM25AGG, kurt_income) #Create an object for the kurtosis
+CoV <- c(CoV_PM25AGG, CoV_income) #Create an object for the CoV
+#normality <- c(normPop_PVAL, normSummer_PVAL) #Create an object for the normality PVALUE
+
+data.for.table1 = data.frame(Samples, Mean, Median, Mode, SD, CoV, Skewness, Kurtosis)
+
+#Make table 1
+table1 <- gridExtra::tableGrob(data.for.table1, rows = c("","")) #make a table "Graphical Object" (GrOb) 
+t1Caption <- grid::textGrob("Table 1: Descriptive Statistics for PM 2.5 and Income in Metro Vancovuer", gp = grid::gpar(fontsize = 14))
+ padding <- grid::unit(5, "mm")
+
+table1 <- gtable_add_rows(table1, 
+                          heights = grid::grobHeight(t1Caption) + padding, 
+                          pos = 0)
+
+table1 <- gtable_add_grob(table1,
+                          t1Caption, t = 1, l = 2, r = ncol(data.for.table1) + 1)
+
+
+gridExtra::grid.arrange(table1, newpage = TRUE)
+
+#Printing a table (You can use the same setup for printing other types of objects (see ?png))
+png("Output_Table1.png") #Create an object to print the table to
+gridExtra::grid.arrange(table1, newpage = TRUE)
+dev.off() #Print table
