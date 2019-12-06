@@ -1,0 +1,138 @@
+# #Libraries
+install.packages("sf")
+install.packages("plyr")
+install.packages("dplyr")
+install.packages("spdep")
+install.packages("GISTools")
+install.packages("raster")
+install.packages("maptools")
+install.packages("rgdal")
+install.packages("spatstat")
+install.packages("sp")
+install.packages("spatstat")
+install.packages("tmap")
+install.packages("gstat")
+install.packages("spgwr")
+install.packages("rgeos")
+install.packages("gridExtra")
+install.packages("tidyverse")
+install.packages("gridExtra")
+install.packages("maps")
+install.packages("bcmaps")
+install.packages("fBasics")
+install.packages("tidyverse")
+install.packages("grid")
+install.packages("rlang")
+install.packages("gtable")
+install.packages("htmltools")
+install.packages("shinyjs")
+
+library(shinyjs)
+library(htmltools)
+library(sf)
+library(plyr)
+library(dplyr)
+library(spdep)
+library(GISTools)
+library(raster)
+library(maptools)
+library(rgdal)
+library(spatstat)
+library(sp)
+library(spatstat)
+library(tmap)
+library(gstat)
+library(spgwr)
+library(rgeos)
+library(tidyverse)
+library(gridExtra)
+library(maps)
+library(bcmaps)
+library(fBasics)
+library(gridExtra)
+library(tidyverse)
+library(grid)
+library(gtable)
+
+##Set working directory
+setwd("E:/Geog 418/Final Project/geog418-518-2019-finalproject-master")
+
+#Reading in particulate matter dataset
+pm25 <- read.csv("PM25.csv") #Read in PM2.5 data
+
+#Select only columns 1 and 2
+pm25 <- pm25[,1:2]
+
+#Change the column names 
+colnames(pm25) <- c("POSTALCODE", "PM25")
+pm25 <- na.omit(pm25)
+
+#Reading in postal code shapefile
+postalcodes <- shapefile("BC_Postal_Codes") #Read in related postal code data
+
+#Reading in dissemination tract and income data
+income <- read.csv("Income.csv") #Read in census income data  
+colnames(income) <- c("DAUID", "Income") #Select only ID and Income columns
+census.tracts <- shapefile("BC_DA.shp") #Read in dissemination tract shapefile
+income.tracts <- merge(census.tracts,income, by = "DAUID") #Merge income and dissemination data
+nrow(income.tracts) #Determine the number of columns in the dataframe
+income.tracts <- income.tracts[!is.na(income.tracts$Income),]
+income.tracts<- spTransform(income.tracts, CRS("+init=epsg:3005"))
+
+###Map income
+map_MedIncome <- tm_shape(income.tracts) + 
+  tm_polygons(col = "Income", ##looking at value for each polygon, we are mapping morans I this time but you could make it p value or variance etc
+              title = "Median Income ($)", 
+              style = "jenks", 
+              palette = "-RdBu", n = 6, border.col = NA, border.alpha = 0) +   tm_legend(legend.outside=TRUE)  
+map_MedIncome
+
+# med.income <- income.tracts$Income
+# shades <- auto.shading(med.income, n=6, cols = brewer.pal(6, 'YlGn'))
+# choropleth(income.tracts, med.income, shades) #map the data with associated colours
+# choro.legend("bottomleft", "left", shades, cex= .75, title= "Median Income ($)") #add a legend (you might need to change the location)
+# title("2016 Median Income in Metro Vancouver, BC")
+# box(which = "outer")
+
+#Select postal codes that fall within dissemination tracts)
+postalcodes <- intersect(postalcodes,income.tracts)
+plot(postalcodes) #See what the data looks like spatially
+head(postalcodes) #See what the data looks like in tabular form
+
+#Join PM2.5 data with postal code data-- point file of postal codes and assoicated pm values
+pm25.spatial <- merge(postalcodes, pm25,by = "POSTALCODE")
+
+#Aggregate the PM2.5 values in each DA in order to have a single value per DA. Here we aggregate based on the max.the output is
+#a single value for each dissemination area that is the max value of all observations in each tracts
+pm25.aggregate <- aggregate((as.numeric(pm25.spatial$PM25)/10)~pm25.spatial$DAUID,FUN=max)
+
+#Re-join aggregated data to the income.tracts layer.
+colnames(pm25.aggregate) <- c("DAUID", "PM25AGG") #Select only ID and Income columns
+income.pm25 <- merge(income.tracts,pm25.aggregate, by = "DAUID") #Merge income and dissemination data
+
+#Re-join aggregated data to the pm25.spatial points layer.
+pm25.points.aggregate <- merge(pm25.spatial, pm25.aggregate, by = "DAUID")
+
+#Create a subsample of the datapoints provided in the PM2.5 dataset using the sample n provided on CourseSpaces
+set.seed(360)
+sampleSize=360
+spSample <- pm25.points.aggregate[sample(1:length(pm25.points.aggregate),sampleSize),]
+
+#remove NA values
+spSample <- spSample[!is.na(spSample@data$PM25AGG),]
+spSample<- spTransform(spSample, CRS("+init=epsg:3005"))
+
+
+#Create an empty grid to use for interpolation where n is the total number of cells
+grd <- as.data.frame(spsample(spSample, "regular", n=50000))
+names(grd)       <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd)     <- TRUE  # Create SpatialPixel object
+fullgrid(grd)    <- TRUE  # Create SpatialGrid object
+proj4string(grd) <- proj4string(spSample)
+
+#create plot of subsample of PM 2.5
+tm_shape(income.tracts) + tm_borders(col='lightgrey') + tm_shape(spSample) +
+  tm_dots(col="PM25AGG", scale= 0.5, palette = "YlOrRd", 
+          title="Sampled PM 2.5 \n(in ppm)", size=0.7) + 
+  tm_legend(legend.outside=TRUE)
