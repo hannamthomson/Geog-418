@@ -1,0 +1,25 @@
+##Nearest Neighbour Distance
+NND_spSample<- spSample[!is.na(spSample@data$PM25AGG),]
+
+nearestNeighbour <- nndist(NND_spSample@data$PM25AGG)
+
+##Convert the nearestNeighbor object into a dataframe.
+nearestNeighbour=as.data.frame(as.numeric(nearestNeighbour))
+
+##Change the column name to "Distance"
+colnames(nearestNeighbour) = "Distance"
+
+#Calculate the nearest neighbor statistic to test.
+N <- nrow(NND_spSample@data)
+nnd = (sum(nearestNeighbour$Distance))/ N
+
+studyArea <- gArea(spgeom = income.tracts, byid=FALSE)
+pointDensity <- N / studyArea
+
+r.nnd = 1 / (2 * sqrt(pointDensity))
+d.nnd = 1.07453 / sqrt(pointDensity)
+R = nnd / r.nnd
+SE.NND <- 0.26136 / sqrt(N * pointDensity)
+
+#Z-test
+NND_z = (nnd - r.nnd) / SE.NND
